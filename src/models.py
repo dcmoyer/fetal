@@ -69,12 +69,14 @@ class BaseModel:
             file_name = '{epoch:0>4d}_{val_dice_coef:.4f}.h5'
         else:
             file_name = '{epoch:0>4d}.h5'
-        self.model.fit_generator(generator,
-                                 epochs=epochs,
-                                 validation_data=val_gen,
-                                 verbose=1,
-                                 callbacks=[ModelCheckpoint(os.path.join(path, file_name), save_weights_only=True, period=50),
-                                            TensorBoard(log_dir=f'logs/{self.name}')])
+        self.model.fit_generator(
+          generator,
+          epochs=epochs,
+          validation_data=val_gen,
+          verbose=1,
+          callbacks=[ModelCheckpoint(os.path.join(path, file_name), save_weights_only=True, period=50),
+          TensorBoard(log_dir=f'logs/{self.name}')]
+        )
 
     def predict(self, generator):
         path = f'data/predict/{self.name}'
@@ -143,7 +145,7 @@ class UNet(BaseModel):
         self.model = Model(inputs=inputs, outputs=outputs)
 
     def _compile(self, weights):
-        self.model.compile(optimizer=Adam(lr=1e-4),
+        self.model.compile(optimizer=Adam(lr=5e-5),
                            loss=weighted_crossentropy(weights=weights, boundary_weight=1.),
                            metrics=[dice_coef])
 
