@@ -1,3 +1,6 @@
 [submodule "submodules/neuron"]
 	path = submodules/neuron
 	url = https://github.com/adalca/neuron.git
+[submodule "submodules/pytools"]
+	path = submodules/pytools
+	url = https://github.com/adalca/pytools-lib.git
