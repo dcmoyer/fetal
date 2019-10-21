@@ -1,5 +1,6 @@
+
+
 import constants
-import glob
 import numpy as np
 from util import read_vol
 from scipy.ndimage.measurements import label
@@ -16,6 +17,9 @@ def crop(vol):
     return resized
 
 
+# dmoyer:
+# this appears to pad with periodic boundaries.
+# To avoid this set tile to be false
 def split(vol):
     vols = []
     for i in slice(constants.SHAPE[0]), slice(-constants.SHAPE[0], vol.shape[0]):

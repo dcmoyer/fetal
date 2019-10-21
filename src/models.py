@@ -48,7 +48,13 @@ def save_prediction(pred, input_file, tile, path, scale=False):
 
 
 class BaseModel:
-    def __init__(self, input_size, name=None, filename=None, weights=None):
+    def __init__(self, input_size, name=None, filename=None, weights=None,
+        log_location='logs', save_location='models', output_location='data/predict'):
+
+        self.log_location = log_location
+        self.save_location = save_location
+        self.output_location = output_location
+
         self.input_size = input_size
         self.name = name if name else self.__class__.__name__.lower()
         self._new_model()
@@ -63,7 +69,8 @@ class BaseModel:
         raise NotImplementedError()
 
     def train(self, generator, val_gen, epochs):
-        path = f'models/{self.name}'
+        path = f'{self.save_location}/{self.name}'
+        
         os.makedirs(path, exist_ok=True)
         if val_gen:
             file_name = '{epoch:0>4d}_{val_dice_coef:.4f}.h5'
@@ -75,14 +82,16 @@ class BaseModel:
           validation_data=val_gen,
           verbose=1,
           callbacks=[ModelCheckpoint(os.path.join(path, file_name), save_weights_only=True, period=50),
-          TensorBoard(log_dir=f'logs/{self.name}')]
+          TensorBoard(log_dir=f'{self.log_location}/{self.name}')]
         )
 
     def predict(self, generator):
-        path = f'data/predict/{self.name}'
+        print("[models] TODO: replace hard-coded predict location")
+        path = f'{self.output_location}/{self.name}'
         os.makedirs(path, exist_ok=True)
 
-        tile = generator.tile_inputs
+        #tile = generator.tile_inputs
+        tile = False
         n = len(generator)//8 if tile else len(generator)
         for i in range(n):
             input_file = generator.input_files[i]
@@ -100,6 +109,7 @@ class UNet(BaseModel):
     # 140 perceptive field
     def _new_model(self):
         inputs = layers.Input(shape=self.input_size)
+        #inputs = layers.Input(shape=(None,None,None,1))
 
         conv1 = layers.Conv3D(32, (3, 3, 3), activation='relu', padding='same')(inputs)
         conv1 = layers.Conv3D(32, (3, 3, 3), activation='relu', padding='same')(conv1)
@@ -262,7 +272,8 @@ class AESeg(BaseModel):
                            metrics={'outputs': dice_coef, 'ae_outputs': 'accuracy'})
 
     def predict(self, generator):        
-        path = f'data/predict/{self.name}'
+        path = f'{self.output_location}/{self.name}'
+        print("[models] TODO: replace hard-coded predict location")
         os.makedirs(path, exist_ok=True)
 
         for i in range(len(generator)):

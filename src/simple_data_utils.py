@@ -1,3 +1,5 @@
+
+
 import constants
 import numpy as np
 from image3d import ImageTransformer, Iterator
@@ -13,61 +15,86 @@ def _format(file_formats, s, n):
             files.append(f.format(s=s, n=str(n).zfill(4), p=str(max(0, n-1)).zfill(4)))
         return files
 
-
+#
+# frames is a dictionary with
+#   sample_handles as keys 
+#   lists of frame_indices as values
 class DataGenerator(Iterator):
+
+    #
+    # init defines a function handle variable
+    #   self.preproc_func
+    # currently this is either set to preprocess( [x], resize=self.resize) or
+    # an identity function if the preprocessing is called before-hand.
     def __init__(self,
-                 frames,
-                 input_file_format,
+                 list_of_samples,
+                 frames=None,
+                 input_file_format=None,
                  label_file_format=None,
                  label_types=None,
                  load_files=True,
                  random_gen=False,
                  augment=False,
                  resize=False,
-                 tile_inputs=False,
                  batch_size=1,
-                 seed=None):
+                 seed=None,
+                 input_file_list=None,
+                 label_file_list=None,
+                 ):
+
         self.frames = frames
-        self.samples = list(self.frames.keys())
+        self.samples = list_of_samples
+        self.load_files = load_files
+        self.random_gen = random_gen
+        self.augment = augment
+        self.resize = resize
+
         self.input_file_format = input_file_format
         self.label_file_format = label_file_format
         self.input_files = []
         self.label_files = None if self.label_file_format is None else []
         self.label_types = label_types
-        self.load_files = load_files
-        self.random_gen = random_gen
-        self.augment = augment
-        self.resize = resize
-        self.tile_inputs = tile_inputs
-        
-        if not self.random_gen:
+
+        if self.input_file_format is not None:
+            if self.frames is None:
+                raise ValueError("[simple_data_utils] for input_file_format frames cannot be NoneType")
             for s in self.frames:
                 for n in self.frames[s]:
                     self.input_files.append(_format(self.input_file_format, s, n))
                     if self.label_file_format:
                         self.label_files.append(_format(self.label_file_format, s, n))
+        elif self.input_file_list is not None:
+            self.input_files = self.input_file_list
+            if self.label_file_list is not None:
+                if len(self.label_file_list) != self.input_file_list:
+                    raise ValueError("[simple_data_utils] label_file_list must match input_file_list")
+                self.label_files = self.label_file_list
+        else:
+            raise ValueError("[simple_data_utils] either {input,label}_file_format or {input,label}_file_list must be present.")
+            exit(1)
 
         self.inputs = self.input_files
         self.labels = self.label_files
 
+        self.preproc_func = lambda x: preprocess(x, resize=self.resize)
         if self.load_files:
-            if self.random_gen:
-                raise ValueError('Input sampling is only supported if files are not preloaded.')
-            self.inputs = [preprocess(file, resize=self.resize, tile=self.tile_inputs) for file in self.input_files]
+            #this loads everything into memory
+            print("[simple_data_utils] Preloading.")
+
+            self.inputs = []
+            for filename in self.input_files:
+              self.inputs.append(self.preproc_func(filename))
             if self.label_files is not None:
-                self.labels = [preprocess(file, resize=self.resize, tile=self.tile_inputs) for file in self.label_files]
-            if self.tile_inputs:
-                self.inputs = np.reshape(self.inputs, (-1,) + np.asarray(self.inputs).shape[-4:])
-                if self.label_files is not None:
-                    self.labels = np.reshape(self.labels, (-1,) + np.asarray(self.labels).shape[-4:])
-        elif self.tile_inputs:
-            self.inputs = np.repeat(self.inputs, 8, axis=0)
-            if self.label_files is not None:
-                self.labels = np.repeat(self.labels, 8, axis=0)
+              self.labels = []
+              for filename in self.label_files:
+                self.labels.append(self.preproc_func(filename))
+
+            #self.inputs = [self.preproc_func(file) for file in self.input_files]
+            #if self.label_files is not None:
+            #    self.labels = [self.preproc_func(file) for file in self.label_files]
+            self.preproc_func = lambda x: x
 
         if self.augment:
-            if self.tile_inputs:
-                raise ValueError('Augmentation not supported if inputs are tiled.')
             self.image_transformer = ImageTransformer(rotation_range=90.,
                                                       shift_range=0.1,
                                                       shear_range=0.1,
@@ -77,43 +104,38 @@ class DataGenerator(Iterator):
                                                       cval=0,
                                                       flip=True)
 
-        super().__init__(max(len(self.samples), len(self.inputs)), batch_size, self.augment, seed)
+        super().__init__(len(self.inputs), batch_size, self.augment, seed)
 
     def _get_batch(self, index_array):
+
         batch = []
         if self.label_types is None:
             for _, i in enumerate(index_array):
-                if self.load_files:
-                    x = self.inputs[i]
-                elif self.tile_inputs:
-                    x = preprocess(self.inputs[i], tile=self.tile_inputs)[i%8]
-                elif self.random_gen:
-                    s = self.samples[i]
-                    n = np.random.choice(self.frames[s])
-                    x = preprocess(_format(self.input_file_format, s, n), resize=self.resize, tile=self.tile_inputs)
-                else:
-                    x = preprocess(self.inputs[i], resize=self.resize)
+                sample_idx = i
+                if self.random_gen:
+                    sample_idx = np.random.choice(len(self.inputs))
+
+                #if load_files is true, this is an identity function, otherwise it's the 
+                #preprocess function with preset args.
+                x = self.preproc_func(self.inputs[i])
+
                 if self.augment:
                     x = self.image_transformer.random_transform(x, seed=self.seed)
                 batch.append(x)
+
             return np.asarray(batch)
 
         labels = []
         for _, i in enumerate(index_array):
-            if self.load_files:
-                x = self.inputs[i]
-                y = self.labels[i]
-            elif self.tile_inputs:
-                x = preprocess(self.inputs[i], tile=self.tile_inputs)[i%8]
-                y = preprocess(self.labels[i], tile=self.tile_inputs)[i%8]
-            elif self.random_gen:
-                s = self.samples[i]
-                n = np.random.choice(self.frames[s])
-                x = preprocess(_format(self.input_file_format, s, n), resize=self.resize, tile=self.tile_inputs)
-                y = preprocess(_format(self.label_file_format, s, n), resize=self.resize, tile=self.tile_inputs)
-            else:
-                x = preprocess(self.inputs[i], resize=self.resize)
-                y = preprocess(self.labels[i], resize=self.resize)
+            sample_idx = i
+            if self.random_gen:
+                sample_idx = np.random.choice(len(self.inputs))
+
+            #if load_files is true, this is an identity function, otherwise it's the 
+            #preprocess function with preset args
+            x = self.preproc_func(self.inputs[sample_idx])
+            y = self.preproc_func(self.labels[sample_idx])
+
             if self.augment:
                 x, y = self.image_transformer.random_transform(x, y, seed=self.seed)
             batch.append(x)
@@ -129,6 +151,9 @@ class DataGenerator(Iterator):
                 all_labels.append(batch)
             else:
                 raise ValueError(f'Label type {label_type} is not supported.')
+
         if len(all_labels) == 1:
             all_labels = all_labels[0]
+
         return (np.asarray(batch), np.asarray(all_labels))
+

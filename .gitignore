@@ -118,3 +118,4 @@ logs/
 # outputs
 *.err
 *.out
+*.swp

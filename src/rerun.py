@@ -9,14 +9,14 @@ import glob
 import numpy as np
 import time
 import util
-from data import DataGenerator
+from data_utils import DataGenerator
 from models import UNet, UNetSmall, AESeg
 
 
 #test, val, (implicit) train
 options_split = [0.7,0.2]
 options_epochs = 3000
-options_load_files=False
+options_load_files=True
 organ = "all_brains"
 
 ##
@@ -50,13 +50,13 @@ test = shuffled[val_split:]
 
 #frame_reference = constants.LABELED_FRAMES
 frame_reference = new_labels.NEW_FRAMES
-random_gen = True
+random_gen = False
 shape = constants.SHAPE
 
 
-model_file = "/data/vision/polina/projects/fetal_segmentation/models/unet3000/2950_0.8471.h5"
+#model_file = "/data/vision/polina/projects/fetal_segmentation/models/unet3000/2950_0.8471.h5"
 #weights = util.get_weights(glob.glob(f'/data/vision/polina/projects/fetal_segmentation/data/labels/*/*_{organ}.nii.gz'))
-name = "no_ds"
+name = "trial"
 label_types = LABELS["unet"]
 #model = MODELS["unet"](shape, name=name, filename=None, weights=weights)
 model = MODELS["unet"](shape, name=name, filename=None, weights=None)
@@ -65,9 +65,11 @@ model = MODELS["unet"](shape, name=name, filename=None, weights=None)
 ##
 ##
 ##
-input_file_format = '/data/vision/polina/projects/fetal_segmentation/data/rawdata/{s}/{s}_{n}.nii.gz'
+#input_file_format = '/data/vision/polina/projects/fetal_segmentation/data/rawdata/{s}/{s}_{n}.nii.gz'
+input_file_format = 'data/vol-links-loc/{s}/{s}_{n}.nii.gz'
 #input_file_format = 'data/downsampled_50/{s}/{s}_{n}.nii.gz'
-label_file_format = f'/data/vision/polina/projects/fetal_segmentation/data/labels/{{s}}/{{s}}_{{n}}_{organ}.nii.gz'
+label_file_format = f'data/label-links-loc/{{s}}/{{s}}_{{n}}_{organ}.nii.gz'
+#label_file_format = f'/data/vision/polina/projects/fetal_segmentation/data/labels/{{s}}/{{s}}_{{n}}_{organ}.nii.gz'
 
 #model.load_weights()
 
@@ -76,9 +78,9 @@ label_file_format = f'/data/vision/polina/projects/fetal_segmentation/data/label
 ###
 
 train_gen = DataGenerator( \
-  {s: frame_reference[s] for s in train}, \
-  input_file_format, \
-  label_file_format, \
+  frames = {s: frame_reference[s] for s in train}, \
+  input_file_format = input_file_format, \
+  label_file_format = label_file_format, \
   label_types=label_types, \
   load_files=options_load_files, \
   random_gen=random_gen, \
@@ -86,9 +88,9 @@ train_gen = DataGenerator( \
 )
 
 val_gen = DataGenerator( \
-  {s: frame_reference[s] for s in val}, \
-  input_file_format, \
-  label_file_format, \
+  frames = {s: frame_reference[s] for s in val}, \
+  input_file_format = input_file_format, \
+  label_file_format = label_file_format, \
   label_types=label_types, \
   load_files=options_load_files, \
   random_gen=random_gen, \
