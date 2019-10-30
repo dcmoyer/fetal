@@ -1,3 +1,5 @@
+
+
 from keras.models import load_model, Model
 from keras.optimizers import Adam
 from keras.callbacks import ModelCheckpoint, TensorBoard
@@ -5,9 +7,12 @@ from keras import backend as K
 from keras import layers
 import numpy as np
 import os
-import process
+#import process
+import simple_preproc
 import util
 
+#TODO: move this elsewhere
+import nibabel as nib
 
 def dice_coef(y_true, y_pred):
     y_true_f = K.flatten(y_true)
@@ -35,16 +40,25 @@ def weighted_crossentropy(weights=None, boundary_weight=None, pool=5):
     return loss_fn
 
 
-def save_prediction(pred, input_file, tile, path, scale=False):
-    fname = input_file.split('/')[-1]
-    sample = fname.split('_')[0]
-    path = os.path.join(path, sample)
-    os.makedirs(path, exist_ok=True)
-    shape = util.shape(input_file)
-    header = util.header(input_file)
-    vol = process.postprocess(pred, shape, resize=True, tile=tile)
-    util.save_vol(vol, os.path.join(path, fname), header, scale)
-    print(fname, flush=True)
+def save_prediction(pred, input_file, tile, path, scale=False, ):
+    pass
+    ###TODO: get rid of this fuckery
+    ##fname = input_file.split('/')[-1]
+    ##sample = fname.split('_')[0]
+    ##path = os.path.join(path, sample)
+    ##os.makedirs(path, exist_ok=True)
+    ##shape = util.shape(input_file)
+    ##header = util.header(input_file)
+
+    ###vol = process.postprocess(pred, shape, resize=True, tile=tile)
+    ##vol = simple_preproc.preprocess(pred)
+
+    ##print(vol.shape)
+    ##for i in range(3):
+    ##  if vol.shape[i] > 
+
+    ##util.save_vol(vol, os.path.join(path, fname), header, scale)
+    ##print(fname, flush=True)
 
 
 class BaseModel:
@@ -86,29 +100,57 @@ class BaseModel:
         )
 
     def predict(self, generator):
-        print("[models] TODO: replace hard-coded predict location")
         path = f'{self.output_location}/{self.name}'
         os.makedirs(path, exist_ok=True)
+        print("[models] TODO: generalize file output formatting")
 
-        #tile = generator.tile_inputs
-        tile = False
-        n = len(generator)//8 if tile else len(generator)
+        n = len(generator)
         for i in range(n):
             input_file = generator.input_files[i]
-            if not isinstance(input_file, str):
-                input_file = input_file[0]
-            pred = self.model.predict(np.concatenate([generator[8*i+j] for j in range(8)]) if tile else generator[i])
-            save_prediction(pred, input_file, tile, path)
+            fname = input_file.split('/')[-1]
+            header = util.header(input_file)
+
+            #vol = nib.load(input_file)
+            vol = generator[i]
+            #vol = vol[0,:,:,:]
+            sub_vols, sub_codes = simple_preproc.get_subvolumes(vol[0], self.input_shape )
+            preds = []
+            for sub_vol in sub_vols:
+                preds.append(self.model.predict( sub_vol[np.newaxis,:,:,:,:])[0])
+            pred = simple_preproc.sub_vols_to_original_shape( 
+              preds, sub_codes, vol.shape[1:]
+            )
+            util.save_vol(vol, os.path.join(path, fname), )
 
     def test(self, generator):
         metrics = self.model.evaluate_generator(generator)
         return dict(zip(self.model.metrics_names, [metrics] if isinstance(metrics, float) else metrics))
 
+##    def predict(self, generator):
+##        print("[models] TODO: replace hard-coded predict location")
+##        path = f'{self.output_location}/{self.name}'
+##        os.makedirs(path, exist_ok=True)
+##
+##        #tile = generator.tile_inputs
+##        tile = False
+##        n = len(generator)//8 if tile else len(generator)
+##        for i in range(n):
+##            input_file = generator.input_files[i]
+##            if not isinstance(input_file, str):
+##                input_file = input_file[0]
+##            pred = self.model.predict(
+##              np.concatenate([generator[8*i+j] for j in range(8)]) if tile else generator[i]
+##            )
+##            save_prediction(pred, input_file, tile, path)
+
 
 class UNet(BaseModel):
     # 140 perceptive field
     def _new_model(self):
-        inputs = layers.Input(shape=self.input_size)
+
+        self.input_shape = (128,128,96,1)
+        #inputs = layers.Input(shape=self.input_size)
+        inputs = layers.Input(shape=(128,128,96,1))
         #inputs = layers.Input(shape=(None,None,None,1))
 
         conv1 = layers.Conv3D(32, (3, 3, 3), activation='relu', padding='same')(inputs)
@@ -126,27 +168,34 @@ class UNet(BaseModel):
         conv4 = layers.Conv3D(256, (3, 3, 3), activation='relu', padding='same')(pool3)
         conv4 = layers.Conv3D(256, (3, 3, 3), activation='relu', padding='same')(conv4)
         pool4 = layers.MaxPooling3D(pool_size=(2, 2, 2))(conv4)
+        print(conv4.shape)
 
         conv5 = layers.Conv3D(512, (3, 3, 3), activation='relu', padding='same')(pool4)
         conv5 = layers.Conv3D(512, (3, 3, 3), activation='relu', padding='same')(conv5)
+        print(conv5.shape)
 
         up6 = layers.Conv3DTranspose(256, (2, 2, 2), strides=(2, 2, 2), padding='same')(conv5)
+        print(up6.shape)
         conc6 = layers.concatenate([up6, conv4])
+        print(conc6.shape)
         conv6 = layers.Conv3D(256, (3, 3, 3), activation='relu', padding='same')(conc6)
         conv6 = layers.Conv3D(256, (3, 3, 3), activation='relu', padding='same')(conv6)
 
         up7 = layers.Conv3DTranspose(128, (2, 2, 2), strides=(2, 2, 2), padding='same')(conv6)
         conc7 = layers.concatenate([up7, conv3])
+        print(conc7.shape)
         conv7 = layers.Conv3D(128, (3, 3, 3), activation='relu', padding='same')(conc7)
         conv7 = layers.Conv3D(128, (3, 3, 3), activation='relu', padding='same')(conv7)
 
         up8 = layers.Conv3DTranspose(64, (2, 2, 2), strides=(2, 2, 2), padding='same')(conv7)
         conc8 = layers.concatenate([up8, conv2])
+        print(conc8.shape)
         conv8 = layers.Conv3D(64, (3, 3, 3), activation='relu', padding='same')(conc8)
         conv8 = layers.Conv3D(64, (3, 3, 3), activation='relu', padding='same')(conv8)
 
         up9 = layers.Conv3DTranspose(32, (2, 2, 2), strides=(2, 2, 2), padding='same')(conv8)
         conc9 = layers.concatenate([up9, conv1])
+        print(conc9.shape)
         conv9 = layers.Conv3D(32, (3, 3, 3), activation='relu', padding='same')(conc9)
         conv9 = layers.Conv3D(32, (3, 3, 3), activation='relu', padding='same')(conv9)
 
@@ -167,15 +216,15 @@ class UNetSmall(UNet):
 
         conv1 = layers.Conv3D(32, (3, 3, 3), activation='relu', padding='same')(inputs)
         conv1 = layers.Conv3D(32, (3, 3, 3), activation='relu', padding='same')(conv1)
-        pool1 = layers.MaxPooling3D(pool_size=(2, 2, 2))(conv1)
+        pool1 = layers.MaxPooling3D(pool_size=(2, 2, 2), padding='same')(conv1)
 
         conv2 = layers.Conv3D(64, (3, 3, 3), activation='relu', padding='same')(pool1)
         conv2 = layers.Conv3D(64, (3, 3, 3), activation='relu', padding='same')(conv2)
-        pool2 = layers.MaxPooling3D(pool_size=(2, 2, 2))(conv2)
+        pool2 = layers.MaxPooling3D(pool_size=(2, 2, 2), padding='same')(conv2)
 
         conv3 = layers.Conv3D(128, (3, 3, 3), activation='relu', padding='same')(pool2)
         conv3 = layers.Conv3D(128, (3, 3, 3), activation='relu', padding='same')(conv3)
-        pool3 = layers.MaxPooling3D(pool_size=(2, 2, 2))(conv3)
+        pool3 = layers.MaxPooling3D(pool_size=(2, 2, 2), padding='same')(conv3)
 
         conv4 = layers.Conv3D(256, (3, 3, 3), activation='relu', padding='same')(pool3)
         conv4 = layers.Conv3D(256, (3, 3, 3), activation='relu', padding='same')(conv4)
@@ -206,19 +255,19 @@ class AESeg(BaseModel):
 
         conv1 = layers.Conv3D(32, (3, 3, 3), activation='relu', padding='same')(inputs)
         conv1 = layers.Conv3D(32, (3, 3, 3), activation='relu', padding='same')(conv1)
-        pool1 = layers.MaxPooling3D(pool_size=(2, 2, 2))(conv1)
+        pool1 = layers.MaxPooling3D(pool_size=(2, 2, 2), padding='same')(conv1)
 
         conv2 = layers.Conv3D(64, (3, 3, 3), activation='relu', padding='same')(pool1)
         conv2 = layers.Conv3D(64, (3, 3, 3), activation='relu', padding='same')(conv2)
-        pool2 = layers.MaxPooling3D(pool_size=(2, 2, 2))(conv2)
+        pool2 = layers.MaxPooling3D(pool_size=(2, 2, 2), padding='same')(conv2)
 
         conv3 = layers.Conv3D(128, (3, 3, 3), activation='relu', padding='same')(pool2)
         conv3 = layers.Conv3D(128, (3, 3, 3), activation='relu', padding='same')(conv3)
-        pool3 = layers.MaxPooling3D(pool_size=(2, 2, 2))(conv3)
+        pool3 = layers.MaxPooling3D(pool_size=(2, 2, 2), padding='same')(conv3)
 
         conv4 = layers.Conv3D(256, (3, 3, 3), activation='relu', padding='same')(pool3)
         conv4 = layers.Conv3D(256, (3, 3, 3), activation='relu', padding='same')(conv4)
-        pool4 = layers.MaxPooling3D(pool_size=(2, 2, 2))(conv4)
+        pool4 = layers.MaxPooling3D(pool_size=(2, 2, 2), padding='same')(conv4)
 
         conv5 = layers.Conv3D(512, (3, 3, 3), activation='relu', padding='same')(pool4)
         conv5 = layers.Conv3D(512, (3, 3, 3), activation='relu', padding='same')(conv5)

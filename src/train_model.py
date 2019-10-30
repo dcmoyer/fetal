@@ -22,12 +22,12 @@ def train_main(
   label_location,
   log_location,
   save_location,
-  output_location,
   organ="all_brains",
   frame_reference = "",
   weights = None,
   options_epochs = 3000,
   options_augment = True,
+  resize=(96,96,64),
   ):
 
   MODELS = {
@@ -53,10 +53,10 @@ def train_main(
     elif frame_reference == "labeled_frames":
       frame_reference = new_labels.NEW_FRAMES
 
-  shape = constants.SHAPE
+  shape = [i for i in resize] + [1]
   model = MODELS[model_name]( \
     shape, name=name, weights=weights, \
-    log_location=log_location, save_location=save_location, output_location=output_location \
+    log_location=log_location, save_location=save_location, \
   )
 
   #model.load_weights()
@@ -71,8 +71,12 @@ def train_main(
     label_file_format = label_file_format, \
     label_types=label_types, \
     load_files=True, \
-    random_gen=False, \
+    random_gen=True, \
+    resize=resize,\
+    top_clip=99,\
+    rescale_percent=90,\
     augment=options_augment, \
+    batch_size=8,
   )
 
   val_gen = DataGenerator( \
@@ -83,7 +87,9 @@ def train_main(
     label_types=label_types, \
     load_files=True, \
     random_gen=False, \
-    resize=True,\
+    resize=resize,\
+    top_clip=99,\
+    rescale_percent=90,\
     augment=False
   )
 

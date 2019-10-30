@@ -62,56 +62,6 @@ def uncrop(vol, shape):
                            (0, 0)), 'constant')
     return resized
 
-#
-# 191021 
-#
-# This function takes the volume to the correct shape no matter what, zero padding or cropping
-# to get there. 
-#
-# zeropadding comes first! then cropping.
-def resize_zero_padding_nd(vol, shape, n_dims=3):
-    #dx = (shape[0] - vol.shape[0]) // 2
-    #dy = (shape[1] - vol.shape[1]) // 2
-    #dz = (shape[2] - vol.shape[2]) // 2
-
-    dxyz = []
-    dxyz_mod = []
-    for i in range(n_dims):
-      if shape[i] is not None:
-        dxyz.append((shape[i] - vol.shape[i]) // 2)
-        dxyz_mod.append( (shape[i] - vol.shape[i]) % 2 )
-      else:
-        dxyz.append(None)
-        dxyz_mod.append(None)
-
-    crop_limits = []
-    zpad_limits = []
-    for i,(diff,diff_mod) in enumerate(zip(dxyz, dxyz_mod)):
-
-      if diff is not None and diff > 0:
-        # zero pad
-        zpad_limits.append( (diff, shape[i] - vol.shape[i] + diff_mod) )
-        crop_limits.append( (0,shape[i]) )
-      elif diff is not None and diff < 0:
-        # crop
-        zpad_limits.append( (0,0) )
-        crop_limits.append( (-diff,vol.shape[i] + diff + diff_mod) )
-      else:
-        # no change, either None or diff == 0
-        zpad_limits.append( (0,0) )
-        crop_limits.append( (0,shape[i]) )
-
-    print(zpad_limits)
-    print(crop_limits)
-
-    resized = np.pad(vol, tuple(zpad_limits), 'constant')
-
-    slices = tuple( slice(int(start),int(stop)) for start,stop in crop_limits )
-
-    resized = resized[ slices ]
-
-    return resized
-
 
 def unsplit(vols, shape):
     vol = np.zeros(shape)

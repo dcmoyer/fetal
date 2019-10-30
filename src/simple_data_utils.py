@@ -3,8 +3,9 @@
 import constants
 import numpy as np
 from image3d import ImageTransformer, Iterator
-from process import preprocess
-
+#from process import preprocess
+import simple_preproc
+import nibabel as nib
 
 def _format(file_formats, s, n):
     if isinstance(file_formats, str):
@@ -35,7 +36,9 @@ class DataGenerator(Iterator):
                  load_files=True,
                  random_gen=False,
                  augment=False,
-                 resize=False,
+                 resize=None,
+                 top_clip=None,
+                 rescale_percent=None,
                  batch_size=1,
                  seed=None,
                  input_file_list=None,
@@ -47,7 +50,10 @@ class DataGenerator(Iterator):
         self.load_files = load_files
         self.random_gen = random_gen
         self.augment = augment
+
         self.resize = resize
+        self.top_clip = top_clip
+        self.rescale_percent = rescale_percent
 
         self.input_file_format = input_file_format
         self.label_file_format = label_file_format
@@ -76,7 +82,11 @@ class DataGenerator(Iterator):
         self.inputs = self.input_files
         self.labels = self.label_files
 
-        self.preproc_func = lambda x: preprocess(x, resize=self.resize)
+        self.preproc_func = lambda x: simple_preproc.preprocess(
+           x, resize=self.resize, top_clip_percent=self.top_clip, rescale_percentile=self.rescale_percent)
+        self.preproc_func_labels = lambda x: simple_preproc.preprocess(
+           x, resize=self.resize)
+
         if self.load_files:
             #this loads everything into memory
             print("[simple_data_utils] Preloading.")
@@ -87,19 +97,20 @@ class DataGenerator(Iterator):
             if self.label_files is not None:
               self.labels = []
               for filename in self.label_files:
-                self.labels.append(self.preproc_func(filename))
+                self.labels.append(self.preproc_func_labels(filename))
 
             #self.inputs = [self.preproc_func(file) for file in self.input_files]
             #if self.label_files is not None:
-            #    self.labels = [self.preproc_func(file) for file in self.label_files]
+            #    self.labels = [self.preproc_func_labels(file) for file in self.label_files]
             self.preproc_func = lambda x: x
+            self.preproc_func_labels = lambda x: x
 
         if self.augment:
             self.image_transformer = ImageTransformer(rotation_range=90.,
                                                       shift_range=0.1,
                                                       shear_range=0.1,
                                                       zoom_range=0.1,
-                                                      crop_size=constants.SHAPE,
+                                                      crop_size=None,
                                                       fill_mode='nearest',
                                                       cval=0,
                                                       flip=True)
@@ -134,7 +145,7 @@ class DataGenerator(Iterator):
             #if load_files is true, this is an identity function, otherwise it's the 
             #preprocess function with preset args
             x = self.preproc_func(self.inputs[sample_idx])
-            y = self.preproc_func(self.labels[sample_idx])
+            y = self.preproc_func_labels(self.labels[sample_idx])
 
             if self.augment:
                 x, y = self.image_transformer.random_transform(x, y, seed=self.seed)
@@ -156,4 +167,6 @@ class DataGenerator(Iterator):
             all_labels = all_labels[0]
 
         return (np.asarray(batch), np.asarray(all_labels))
+
+
 
