@@ -78,7 +78,7 @@ def get_subvolumes(vol, shape, bypass_vol_error=False):
   for x_idx, x_slice in enumerate(slices[0]):
     for y_idx, y_slice in enumerate(slices[1]):
       for z_idx, z_slice in enumerate(slices[2]):
-        out_vols.append( resize_zero_padding(vol[ (x_slice,y_slice,z_slice) ], shape))
+        out_vols.append( resize_zero_padding_nd(vol[ (x_slice,y_slice,z_slice) ], shape))
         out_codes.append((x_idx,y_idx,z_idx))
 
   return out_vols, out_codes
@@ -106,9 +106,12 @@ def sub_vols_to_original_shape(sub_vols, sub_codes, orig_shape, recomb="tile"):
 
     slices[i].append( slice(0,np.min((orig_shape[i],shape[i]))) )
     sub_slices[i].append( slice(0,shape[i]) )
+
     if orig_shape[i] > shape[i]:
       slices[i].append( slice(shape[i], orig_shape[i]) )
-      sub_slices[i].append( slice(orig_shape[i] - shape[i]+1, shape[i]) )
+      diff = orig_shape[i] - shape[i]
+      sub_slices[i].append( slice(shape[i] - diff, shape[i]) )
+
     if orig_shape[i] > 1.5*shape[i] and not bypass_vol_error:
       raise ValueError("Volume is very large, 150% of input size. Bad Scale?")
 

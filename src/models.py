@@ -113,14 +113,14 @@ class BaseModel:
             #vol = nib.load(input_file)
             vol = generator[i]
             #vol = vol[0,:,:,:]
-            sub_vols, sub_codes = simple_preproc.get_subvolumes(vol[0], self.input_shape )
+            sub_vols, sub_codes = simple_preproc.get_subvolumes(vol[0], self.input_size )
             preds = []
             for sub_vol in sub_vols:
                 preds.append(self.model.predict( sub_vol[np.newaxis,:,:,:,:])[0])
             pred = simple_preproc.sub_vols_to_original_shape( 
               preds, sub_codes, vol.shape[1:]
             )
-            util.save_vol(vol, os.path.join(path, fname), )
+            util.save_vol(pred, os.path.join(path, fname), )
 
     def test(self, generator):
         metrics = self.model.evaluate_generator(generator)
@@ -148,9 +148,9 @@ class UNet(BaseModel):
     # 140 perceptive field
     def _new_model(self):
 
-        self.input_shape = (128,128,96,1)
-        #inputs = layers.Input(shape=self.input_size)
-        inputs = layers.Input(shape=(128,128,96,1))
+        #self.input_shape = (128,128,96,1)
+        inputs = layers.Input(shape=self.input_size)
+        #inputs = layers.Input(shape=(128,128,96,1))
         #inputs = layers.Input(shape=(None,None,None,1))
 
         conv1 = layers.Conv3D(32, (3, 3, 3), activation='relu', padding='same')(inputs)

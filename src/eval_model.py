@@ -7,7 +7,7 @@ import glob
 import numpy as np
 import time
 import util
-from data_utils import DataGenerator
+from simple_data_utils import DataGenerator
 from models import UNet, UNetSmall, AESeg
 
 from argparse import ArgumentParser
@@ -21,7 +21,8 @@ def eval_main(
   input_file_format = "{s}/{s}_{n}.nii.gz",
   frame_reference = "",
   weights = None,
-  resize=(None,None,None),
+  resize=(96,96,64),
+  
   ):
   MODELS = {
       'unet': UNet,
@@ -48,16 +49,21 @@ def eval_main(
   shape = [i for i in resize] + [1] 
   model = MODELS["unet"](
     shape, name=name, filename=model_file, weights=weights,
+    output_location=output_location,
   )
 
   #model.load_weights()
 
   pred_gen = DataGenerator( \
-    {s: frame_reference[s] for s in pred_list}, \
-    input_file_format, \
+    list_of_samples = pred_list, \
+    frames = {s: frame_reference[s] for s in pred_list}, \
+    input_file_format = input_file_format, \
     load_files=False, \
     random_gen=False, \
-    augment=False,
+    augment=False, \
+    top_clip=99, \
+    rescale_percent=90, \
+    resize=None, \
   )
 
   model.predict(pred_gen)
