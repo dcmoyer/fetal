@@ -1,10 +1,10 @@
 
 
-from keras.models import load_model, Model
-from keras.optimizers import Adam
-from keras.callbacks import ModelCheckpoint, TensorBoard
-from keras import backend as K
-from keras import layers
+from tensorflow.keras.models import load_model, Model
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import ModelCheckpoint, TensorBoard
+from tensorflow.keras import backend as K
+from tensorflow.keras import layers
 import numpy as np
 import os
 #import process
@@ -99,14 +99,19 @@ class BaseModel:
           TensorBoard(log_dir=f'{self.log_location}/{self.name}')]
         )
 
-    def predict(self, generator):
-        path = f'{self.output_location}/{self.name}'
-        os.makedirs(path, exist_ok=True)
-        print("[models] TODO: generalize file output formatting")
+    def predict(self, generator, subj_dirs=False):
 
         n = len(generator)
         for i in range(n):
+
+            #TODO: why is this hard coded here.
             input_file = generator.input_files[i]
+
+            subj_dir = input_file.split("/")[-2]
+
+            path = f'{self.output_location}/{subj_dir}'
+            os.makedirs(path, exist_ok=True)
+
             fname = input_file.split('/')[-1]
             header = util.header(input_file)
 

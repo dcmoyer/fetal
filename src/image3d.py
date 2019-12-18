@@ -18,7 +18,8 @@ import warnings
 import multiprocessing.pool
 from functools import partial
 
-from keras.utils.data_utils import Sequence
+#from keras.utils.data_utils import Sequence
+from tensorflow.keras.utils import Sequence
 
 
 def transform_matrix_offset_center(matrix, shape):
